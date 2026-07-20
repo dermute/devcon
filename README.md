@@ -19,8 +19,9 @@ own user, not root.
 ## Image
 
 Built and pushed automatically to `ghcr.io/dermute/devcon:latest` by GitHub
-Actions — on every push to `main`, weekly (to pick up Alpine/Node/Claude Code
-updates), and on manual dispatch. Multi-arch: `linux/amd64` + `linux/arm64`.
+Actions — on every push to `main`, weekly (to pick up base image, Node and
+Claude Code updates), and on manual dispatch. Multi-arch: `linux/amd64` +
+`linux/arm64`.
 
 ## Run
 
