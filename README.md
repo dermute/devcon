@@ -59,6 +59,8 @@ Both persist under the `/config` volume, so they survive rebuilds.
 | `DEVCON_WEB_PORT`| `8443`      | host port for the code-server UI         |
 | `DEVCON_SSH_PORT`| `2222`      | host port for ssh                        |
 | `DEVCON_CONFIG`  | `/.config`  | host path for the persisted `/config`    |
+| `GIT_USER_NAME`  | —           | `git config --global user.name`          |
+| `GIT_USER_EMAIL` | —           | `git config --global user.email`         |
 | `PUID` / `PGID`  | `1000`/`100`| user/group that owns files in the volume |
 
 ## Notes
