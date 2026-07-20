@@ -1,0 +1,20 @@
+services:
+  devcon:
+    image: ghcr.io/dermute/devcon:latest
+    container_name: devcon
+    environment:
+      - PUID=1000            # your NAS user id  (check with `id -u`)
+      - PGID=100             # your NAS group id (100 = `users` on most NAS)
+      - TZ=Europe/Berlin
+      - PASSWORD=${DEVCON_PASSWORD}   # code-server web password, set in .env
+    ports:
+      - "${DEVCON_WEB_PORT:-8443}:8443"   # code-server web UI -> http://<nas-ip>:<port>
+      - "${DEVCON_SSH_PORT:-2222}:22"     # ssh                -> ssh -p <port> abc@<nas-ip>
+    volumes:
+      # host path for persisted state (repos, ~/.claude, gh auth, ssh keys)
+      - "${DEVCON_CONFIG:-/.config}:/config"
+    restart: unless-stopped
+    # deliberately NOT set: privileged, and no /var/run/docker.sock mount —
+    # keep the container unable to touch the host or the Docker daemon.
+    #
+    # to update:  docker compose pull && docker compose up -d
