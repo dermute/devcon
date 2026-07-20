@@ -1,28 +1,35 @@
 # syntax=docker/dockerfile:1
 # Dev environment container — git + gh + Claude Code + code-server + sshd.
 #
-# Base: LinuxServer's code-server image (Alpine + s6-overlay), which already
-# ships a working code-server with PUID/PGID handling — so files created in the
-# mounted volume are owned by my own user instead of root. We add the GitHub
-# CLI, Node/Claude Code, and an sshd service on top.
+# Base: LinuxServer's code-server image. It already ships a working code-server
+# with s6-overlay init and PUID/PGID handling, so files created in the mounted
+# volume are owned by my own user instead of root. It is Ubuntu-based because
+# code-server needs glibc (the Alpine/musl route is impractical). We add the
+# GitHub CLI, Node/Claude Code, and an sshd service on top.
 #
 # NOTE: requires BuildKit (default on Docker 23+) for the heredoc RUN/COPY below.
 FROM ghcr.io/linuxserver/code-server:latest
 
 # ---- toolchain --------------------------------------------------------------
-RUN apk add --no-cache \
-        git \
-        github-cli \
-        openssh \
-        openssh-client \
-        curl \
-        ca-certificates \
-        bash \
-        sudo \
-        nodejs \
-        npm \
- && npm install -g @anthropic-ai/claude-code \
- && npm cache clean --force
+RUN <<'PKG'
+set -e
+export DEBIAN_FRONTEND=noninteractive
+# GitHub CLI apt repo
+mkdir -p -m 755 /etc/apt/keyrings
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
+chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list
+# Node 22 (for Claude Code)
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt-get update
+apt-get install -y --no-install-recommends \
+    git gh openssh-server nodejs ca-certificates
+npm install -g @anthropic-ai/claude-code
+npm cache clean --force
+rm -rf /var/lib/apt/lists/*
+PKG
 
 # ---- add an sshd service to the existing s6 stack ---------------------------
 RUN <<'SETUP'
@@ -42,6 +49,7 @@ SETUP
 # sshd: runs as root (it drops to abc on login), key-only auth
 COPY --chmod=755 <<'SSHRUN' /etc/s6-overlay/s6-rc.d/svc-sshd/run
 #!/usr/bin/with-contenv bash
+mkdir -p /run/sshd
 exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config.dev
 SSHRUN
 
@@ -58,10 +66,10 @@ AuthorizedKeysFile /config/.ssh/authorized_keys
 AllowUsers abc
 UsePAM no
 PidFile /config/ssh/sshd.pid
-Subsystem sftp /usr/lib/ssh/sftp-server
+Subsystem sftp /usr/lib/openssh/sftp-server
 SSHDCONF
 
-# ---- one-shot init: generate/persist ssh host keys, fix ownership -----------
+# ---- one-shot init: ssh host keys, git identity, ownership ------------------
 COPY --chmod=755 <<'INIT' /custom-cont-init.d/10-dev-init
 #!/usr/bin/with-contenv bash
 set -e
@@ -83,5 +91,5 @@ if [ -n "${GIT_USER_EMAIL:-}" ]; then
 fi
 INIT
 
-# 8443 is already exposed by the base image; repeated here for clarity
+# 8443 (code-server) is already exposed by the base image; 22 is for sshd
 EXPOSE 8443 22

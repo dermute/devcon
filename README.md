@@ -12,9 +12,9 @@ Bundles:
 - **code-server** — VS Code in the browser
 - **sshd** — key-only SSH (use a terminal or VS Code Remote-SSH)
 
-Built on `ghcr.io/linuxserver/baseimage-alpine` for its s6 init and
-`PUID`/`PGID` handling, so files created in the volume are owned by my own user,
-not root.
+Built on `ghcr.io/linuxserver/code-server` for a maintained code-server with s6
+init and `PUID`/`PGID` handling, so files created in the volume are owned by my
+own user, not root.
 
 ## Image
 
