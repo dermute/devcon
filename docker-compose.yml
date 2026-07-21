@@ -3,15 +3,19 @@ services:
     image: ghcr.io/dermute/devcon:latest
     container_name: devcon
     environment:
-      - PUID=1000            # your NAS user id  (check with `id -u`)
-      - PGID=100             # your NAS group id (100 = `users` on most NAS)
-      - TZ=Europe/Berlin
-      - PASSWORD=${DEVCON_PASSWORD}   # code-server web password, set in .env
+      - PUID=${DEVCON_PUID:-1000}          # user id that owns files in the volume (check with `id -u`)
+      - PGID=${DEVCON_PGID:-100}           # group id (100 = `users` on most NAS)
+      - TZ=${TZ:-Europe/Berlin}
+      - PASSWORD=${DEVCON_PASSWORD}        # code-server web password, set in .env
       - GIT_USER_NAME=${GIT_USER_NAME}     # git config --global user.name
       - GIT_USER_EMAIL=${GIT_USER_EMAIL}   # git config --global user.email
+      - DEVCON_USER=${DEVCON_USER:-abc}    # login username inside the container
+      - DEVCON_SSH_PASSWORD_AUTH=${DEVCON_SSH_PASSWORD_AUTH:-false}  # ssh password login (default off = key-only)
+      - DEVCON_SSH_PASSWORD=${DEVCON_SSH_PASSWORD:-}   # ssh password, used only when password auth is on
+      - DEVCON_SSH_PUBKEY=${DEVCON_SSH_PUBKEY:-}       # public key to install for key-only ssh
     ports:
       - "${DEVCON_WEB_PORT:-8443}:8443"   # code-server web UI -> http://<nas-ip>:<port>
-      - "${DEVCON_SSH_PORT:-2222}:22"     # ssh                -> ssh -p <port> abc@<nas-ip>
+      - "${DEVCON_SSH_PORT:-2222}:22"     # ssh                -> ssh -p <port> ${DEVCON_USER:-abc}@<nas-ip>
     volumes:
       # host path for persisted state (repos, ~/.claude, gh auth, ssh keys)
       - "${DEVCON_CONFIG:-/.config}:/config"

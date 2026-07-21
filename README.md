@@ -33,15 +33,22 @@ docker compose up -d
 Then:
 
 - **code-server** → `http://<host>:8443` (password from `.env`)
-- **ssh** → `ssh -p 2222 abc@<host>`
+- **ssh** → `ssh -p 2222 <DEVCON_USER>@<host>` (`abc` by default)
 
 ### SSH access
 
-Key-only. Drop your public key into the volume before connecting:
+Key-only by default. Provide a public key one of two ways:
 
 ```bash
+# via .env — installed into authorized_keys on startup
+DEVCON_SSH_PUBKEY="ssh-ed25519 AAAA... you@host"
+
+# or drop it into the volume yourself
 cat ~/.ssh/id_ed25519.pub >> <config>/.ssh/authorized_keys
 ```
+
+To use a password instead, set `DEVCON_SSH_PASSWORD_AUTH=true` and
+`DEVCON_SSH_PASSWORD=...` in `.env`. Key auth stays enabled alongside it.
 
 ### First-run auth (inside the container)
 
@@ -54,15 +61,19 @@ Both persist under the `/config` volume, so they survive rebuilds.
 
 ## Configuration
 
-| Env var          | Default     | Purpose                                  |
-|------------------|-------------|------------------------------------------|
-| `DEVCON_PASSWORD`| —           | code-server web password                 |
-| `DEVCON_WEB_PORT`| `8443`      | host port for the code-server UI         |
-| `DEVCON_SSH_PORT`| `2222`      | host port for ssh                        |
-| `DEVCON_CONFIG`  | `/.config`  | host path for the persisted `/config`    |
-| `GIT_USER_NAME`  | —           | `git config --global user.name`          |
-| `GIT_USER_EMAIL` | —           | `git config --global user.email`         |
-| `PUID` / `PGID`  | `1000`/`100`| user/group that owns files in the volume |
+| Env var                    | Default     | Purpose                                              |
+|----------------------------|-------------|------------------------------------------------------|
+| `DEVCON_PASSWORD`          | —           | code-server web password                             |
+| `DEVCON_WEB_PORT`          | `8443`      | host port for the code-server UI                     |
+| `DEVCON_SSH_PORT`          | `2222`      | host port for ssh                                    |
+| `DEVCON_CONFIG`            | `/.config`  | host path for the persisted `/config`                |
+| `DEVCON_USER`              | `abc`       | login username inside the container                  |
+| `DEVCON_PUID` / `DEVCON_PGID` | `1000`/`100` | user/group id that owns files in the volume       |
+| `DEVCON_SSH_PUBKEY`        | —           | public key installed into `authorized_keys`          |
+| `DEVCON_SSH_PASSWORD_AUTH` | `false`     | allow ssh password login (else key-only)             |
+| `DEVCON_SSH_PASSWORD`      | —           | login user's ssh password (when password auth is on) |
+| `GIT_USER_NAME`            | —           | `git config --global user.name`                      |
+| `GIT_USER_EMAIL`           | —           | `git config --global user.email`                     |
 
 ## Notes
 
