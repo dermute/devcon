@@ -11,6 +11,7 @@ Bundles:
 - **Claude Code** (`claude`)
 - **code-server** — VS Code in the browser
 - **sshd** — key-only SSH (use a terminal or VS Code Remote-SSH)
+- **rootless Podman** — `docker`/`docker compose` inside the container (no daemon on the host)
 
 Built on `ghcr.io/linuxserver/code-server` for a maintained code-server with s6
 init and `PUID`/`PGID` handling, so files created in the volume are owned by my
@@ -50,6 +51,29 @@ cat ~/.ssh/id_ed25519.pub >> <config>/.ssh/authorized_keys
 To use a password instead, set `DEVCON_SSH_PASSWORD_AUTH=true` and
 `DEVCON_SSH_PASSWORD=...` in `.env`. Key auth stays enabled alongside it.
 
+### Docker (rootless Podman)
+
+Docker inside the container is provided by **rootless Podman** — no daemon on the
+host, no host Docker socket. The `docker` command, `docker compose`, and a
+`DOCKER_HOST` socket all work out of the box:
+
+```bash
+docker run --rm hello-world
+docker build -t myapp .
+docker compose up -d
+```
+
+- `docker` is a shim over `podman`; `podman` works directly too.
+- Images and containers persist under `/config` (the volume), so they survive rebuilds.
+- `DOCKER_HOST` points at a rootless Podman API socket, so tools that speak the
+  Docker API (the VS Code Docker extension, testcontainers, `docker compose` v2) work.
+- Set `DEVCON_DOCKER=false` in `.env` to turn the API socket off.
+
+This needs the `security_opt` (`seccomp`/`apparmor`/`label` unconfined) and the
+`/dev/fuse` device already set in `docker-compose.yml`. That is **not** `--privileged`
+and grants no host or host-daemon access — nested containers run rootless and stay
+confined to devcon.
+
 ### First-run auth (inside the container)
 
 ```bash
@@ -72,12 +96,16 @@ Both persist under the `/config` volume, so they survive rebuilds.
 | `DEVCON_SSH_PUBKEY`        | —           | public key installed into `authorized_keys`          |
 | `DEVCON_SSH_PASSWORD_AUTH` | `false`     | allow ssh password login (else key-only)             |
 | `DEVCON_SSH_PASSWORD`      | —           | login user's ssh password (when password auth is on) |
+| `DEVCON_DOCKER`            | `true`      | rootless podman API socket + `DOCKER_HOST`           |
 | `GIT_USER_NAME`            | —           | `git config --global user.name`                      |
 | `GIT_USER_EMAIL`           | —           | `git config --global user.email`                     |
 
 ## Notes
 
-- No `privileged`, no Docker socket mounted — the container can't reach the host
-  or the Docker daemon. It's host-package isolation, not a security sandbox
-  against hostile code.
+- No `privileged` and no host Docker socket mounted — the container can't reach the
+  host or the host Docker daemon. Docker inside is rootless Podman, confined to the
+  container. It's host-package isolation, not a security sandbox against hostile code.
+- Rootless Podman does require the `security_opt` (`seccomp`/`apparmor`/`label`
+  unconfined) and `/dev/fuse` device in `docker-compose.yml` — a much smaller
+  relaxation than `--privileged`, with no host reach.
 - To update: `docker compose pull && docker compose up -d`.

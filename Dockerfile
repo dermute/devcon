@@ -25,11 +25,44 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubc
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt-get update
 apt-get install -y --no-install-recommends \
-    git gh openssh-server nodejs ca-certificates
+    git gh openssh-server nodejs ca-certificates \
+    podman podman-docker uidmap fuse-overlayfs slirp4netns \
+    netavark aardvark-dns podman-compose
 npm install -g @anthropic-ai/claude-code
 npm cache clean --force
 rm -rf /var/lib/apt/lists/*
 PKG
+
+# ---- rootless podman config (the "docker" inside the container) -------------
+# Nested containers run rootless as the login user; storage lands on the /config
+# volume (a real host fs), so there is no overlay-on-overlay. See docker-compose.yml
+# for the seccomp/apparmor/fuse relaxations the outer container needs.
+#
+# Debian/Ubuntu podman ships no default search registry — without this,
+# `podman run hello-world` fails on short-name resolution.
+COPY <<'REG' /etc/containers/registries.conf
+unqualified-search-registries = ["docker.io"]
+REG
+
+# Force fuse-overlayfs for deterministic rootless storage across kernels
+# (pairs with the /dev/fuse device mapped in docker-compose.yml).
+COPY <<'STORE' /etc/containers/storage.conf
+[storage]
+driver = "overlay"
+
+[storage.options.overlay]
+mount_program = "/usr/bin/fuse-overlayfs"
+STORE
+
+# No systemd/dbus in this image: use the cgroupfs manager and a file event log.
+COPY <<'ENGINE' /etc/containers/containers.conf
+[engine]
+cgroup_manager = "cgroupfs"
+events_logger = "file"
+ENGINE
+
+# Silence the podman-docker "emulating docker" banner on every `docker` call.
+RUN touch /etc/containers/nodocker
 
 # ---- add an sshd service to the existing s6 stack ---------------------------
 RUN <<'SETUP'
@@ -39,11 +72,14 @@ set -e
 awk -F: 'BEGIN{OFS=":"} $1=="abc"{$6="/config";$7="/bin/bash"} {print}' /etc/passwd > /etc/passwd.tmp \
     && mv /etc/passwd.tmp /etc/passwd
 mkdir -p /etc/s6-overlay/s6-rc.d/svc-sshd \
+         /etc/s6-overlay/s6-rc.d/svc-podman \
          /etc/s6-overlay/s6-rc.d/user/contents.d \
          /custom-cont-init.d
 echo longrun > /etc/s6-overlay/s6-rc.d/svc-sshd/type
-# enable the service by adding it to the default "user" bundle
+echo longrun > /etc/s6-overlay/s6-rc.d/svc-podman/type
+# enable the services by adding them to the default "user" bundle
 touch /etc/s6-overlay/s6-rc.d/user/contents.d/svc-sshd
+touch /etc/s6-overlay/s6-rc.d/user/contents.d/svc-podman
 SETUP
 
 # sshd: runs as root (it drops to the login user on login). The config is
@@ -54,6 +90,19 @@ COPY --chmod=755 <<'SSHRUN' /etc/s6-overlay/s6-rc.d/svc-sshd/run
 mkdir -p /run/sshd
 exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config.dev
 SSHRUN
+
+# rootless podman API socket → DOCKER_HOST. Runs as the login user; gated by
+# DEVCON_DOCKER so it can be turned off without a crash loop. 10-dev-init has
+# already created /run/user/<uid> and the subuid/subgid ranges by now.
+COPY --chmod=755 <<'PODRUN' /etc/s6-overlay/s6-rc.d/svc-podman/run
+#!/usr/bin/with-contenv bash
+[ "${DEVCON_DOCKER:-true}" = "true" ] || exec sleep infinity
+login_user="${DEVCON_USER:-abc}"
+uid="$(id -u "$login_user")"
+exec s6-setuidgid "$login_user" \
+    env HOME=/config XDG_RUNTIME_DIR="/run/user/${uid}" \
+    podman system service --time=0 "unix:///run/user/${uid}/podman/podman.sock"
+PODRUN
 
 # ---- one-shot init: user rename, ssh config/keys, git identity, ownership ---
 COPY --chmod=755 <<'INIT' /custom-cont-init.d/10-dev-init
@@ -120,6 +169,33 @@ UsePAM no
 PidFile /config/ssh/sshd.pid
 Subsystem sftp /usr/lib/openssh/sftp-server
 EOF
+
+# ---- rootless podman: subuid/subgid, runtime dir, storage, docker env -------
+login_uid="$(id -u "$LOGIN_USER")"
+# subordinate id ranges the login user needs to map nested-container ids
+# (rewritten each boot: /etc resets and the user may be renamed via DEVCON_USER)
+printf '%s:100000:65536\n' "$LOGIN_USER" > /etc/subuid
+printf '%s:100000:65536\n' "$LOGIN_USER" > /etc/subgid
+# XDG_RUNTIME_DIR — no pam_systemd here to create /run/user/<uid>
+mkdir -p "/run/user/${login_uid}"
+lsiown abc:abc "/run/user/${login_uid}"   # "abc" resolves to the login uid/gid
+chmod 700 "/run/user/${login_uid}"
+# persist podman image/container storage + config on the /config volume
+mkdir -p /config/.local/share/containers /config/.config/containers
+lsiown -R abc:abc /config/.local /config/.config
+# export XDG_RUNTIME_DIR (+ DOCKER_HOST when the socket service is on) for shells
+if [ "${DEVCON_DOCKER:-true}" = "true" ]; then
+    docker_host="export DOCKER_HOST=unix:///run/user/${login_uid}/podman/podman.sock"
+else
+    docker_host=""
+fi
+cat > /etc/profile.d/10-podman.sh <<EOF
+export XDG_RUNTIME_DIR=/run/user/${login_uid}
+${docker_host}
+EOF
+# code-server's terminal opens a non-login interactive shell → source it there too
+grep -q '10-podman.sh' /etc/bash.bashrc 2>/dev/null \
+    || echo '[ -f /etc/profile.d/10-podman.sh ] && . /etc/profile.d/10-podman.sh' >> /etc/bash.bashrc
 
 # git identity (optional, from env) — written to /config/.gitconfig
 if [ -n "${GIT_USER_NAME:-}" ]; then

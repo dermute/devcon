@@ -13,14 +13,25 @@ services:
       - DEVCON_SSH_PASSWORD_AUTH=${DEVCON_SSH_PASSWORD_AUTH:-false}  # ssh password login (default off = key-only)
       - DEVCON_SSH_PASSWORD=${DEVCON_SSH_PASSWORD:-}   # ssh password, used only when password auth is on
       - DEVCON_SSH_PUBKEY=${DEVCON_SSH_PUBKEY:-}       # public key to install for key-only ssh
+      - DEVCON_DOCKER=${DEVCON_DOCKER:-true}   # rootless podman API socket + DOCKER_HOST (docker inside)
     ports:
       - "${DEVCON_WEB_PORT:-8443}:8443"   # code-server web UI -> http://<nas-ip>:<port>
       - "${DEVCON_SSH_PORT:-2222}:22"     # ssh                -> ssh -p <port> ${DEVCON_USER:-abc}@<nas-ip>
     volumes:
-      # host path for persisted state (repos, ~/.claude, gh auth, ssh keys)
+      # host path for persisted state (repos, ~/.claude, gh auth, ssh keys, podman images)
       - "${DEVCON_CONFIG:-/.config}:/config"
+    # rootless podman ("docker" inside) needs these — this is NOT privileged and
+    # grants no host or host-daemon access; it only relaxes syscall/LSM filtering
+    # for this container and adds a fuse device. Nested containers stay rootless
+    # and confined to devcon. Remove these three + the device to disable docker.
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+      - label=disable
+    devices:
+      - /dev/fuse
     restart: unless-stopped
     # deliberately NOT set: privileged, and no /var/run/docker.sock mount —
-    # keep the container unable to touch the host or the Docker daemon.
+    # keep the container unable to touch the host or the host Docker daemon.
     #
     # to update:  docker compose pull && docker compose up -d
