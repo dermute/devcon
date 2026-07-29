@@ -64,9 +64,12 @@ docker compose up -d
 ```
 
 - `docker` is a shim over `podman`; `podman` works directly too.
+- `docker compose` is upstream **Compose v2** (the distro package, so it tracks the
+  base image on each weekly rebuild — no pinned version), driving the Podman socket
+  via `DOCKER_HOST`. podman-compose is installed as a fallback provider.
 - Images and containers persist under `/config` (the volume), so they survive rebuilds.
-- `DOCKER_HOST` points at a rootless Podman API socket, so tools that speak the
-  Docker API (the VS Code Docker extension, testcontainers, `docker compose` v2) work.
+- `DOCKER_HOST` points at a rootless Podman API socket, so other tools that speak
+  the Docker API — the VS Code Docker extension, testcontainers — work too.
 - Set `DEVCON_DOCKER=false` in `.env` to turn the API socket off.
 
 This needs the `security_opt` (`seccomp`/`apparmor`/`label` unconfined) and the
@@ -108,6 +111,11 @@ Both persist under the `/config` volume, so they survive rebuilds.
 - Rootless Podman does require the `security_opt` (`seccomp`/`apparmor`/`label`
   unconfined) and `/dev/fuse` device in `docker-compose.yml` — a much smaller
   relaxation than `--privileged`, with no host reach.
+- Passwords are passed as env vars, so `DEVCON_PASSWORD` / `DEVCON_SSH_PASSWORD`
+  are visible in `docker inspect` and to any process in the container. Fine for a
+  personal box; use compose `secrets` if that ever stops being true.
+- `DEVCON_USER` must be a normal lowercase login name — `root` and malformed
+  names are rejected at startup and fall back to `abc`.
 - To update: `docker compose pull && docker compose up -d`.
 
 ## AI attribution

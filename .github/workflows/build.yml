@@ -8,7 +8,7 @@ on:
       - 'docker-compose.yml'
       - '.env.example'
   schedule:
-    # weekly rebuild (Mondays 05:00 UTC) to pull in Alpine / Node / Claude Code updates
+    # weekly rebuild (Mondays 05:00 UTC) to pull in base image / Node / Claude Code updates
     - cron: '0 5 * * 1'
   workflow_dispatch:
 

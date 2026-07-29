@@ -27,7 +27,7 @@ apt-get update
 apt-get install -y --no-install-recommends \
     git gh openssh-server nodejs ca-certificates \
     podman podman-docker uidmap fuse-overlayfs slirp4netns \
-    netavark aardvark-dns podman-compose
+    netavark aardvark-dns podman-compose docker-compose-v2
 npm install -g @anthropic-ai/claude-code
 npm cache clean --force
 rm -rf /var/lib/apt/lists/*
@@ -55,14 +55,34 @@ mount_program = "/usr/bin/fuse-overlayfs"
 STORE
 
 # No systemd/dbus in this image: use the cgroupfs manager and a file event log.
+# compose_providers puts upstream Compose v2 ahead of podman-compose. It must be
+# the absolute plugin path: the Ubuntu docker-compose-v2 package installs only
+# /usr/libexec/..., nothing on PATH, so podman's PATH-based default lookup would
+# silently fall through to podman-compose instead.
 COPY <<'ENGINE' /etc/containers/containers.conf
 [engine]
 cgroup_manager = "cgroupfs"
 events_logger = "file"
+compose_providers = ["/usr/libexec/docker/cli-plugins/docker-compose", "podman-compose"]
 ENGINE
 
 # Silence the podman-docker "emulating docker" banner on every `docker` call.
 RUN touch /etc/containers/nodocker
+
+# The docker-compose-v2 package installs only the CLI plugin, nothing on PATH.
+# Symlink it so `docker-compose ...` works directly as well as `docker compose ...`.
+RUN ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
+
+# shared helpers for the init script and the podman service
+COPY --chmod=644 <<'LIB' /usr/local/lib/devcon.sh
+# permissive boolean parser — "true", "True", "yes", "on" and "1" all count
+is_true() {
+    case "${1:-}" in
+        [Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn]|1) return 0 ;;
+        *)                                        return 1 ;;
+    esac
+}
+LIB
 
 # ---- add an sshd service to the existing s6 stack ---------------------------
 RUN <<'SETUP'
@@ -71,12 +91,18 @@ set -e
 # so ssh sessions, the code-server terminal and git all share one persisted HOME
 awk -F: 'BEGIN{OFS=":"} $1=="abc"{$6="/config";$7="/bin/bash"} {print}' /etc/passwd > /etc/passwd.tmp \
     && mv /etc/passwd.tmp /etc/passwd
-mkdir -p /etc/s6-overlay/s6-rc.d/svc-sshd \
-         /etc/s6-overlay/s6-rc.d/svc-podman \
+mkdir -p /etc/s6-overlay/s6-rc.d/svc-sshd/dependencies.d \
+         /etc/s6-overlay/s6-rc.d/svc-podman/dependencies.d \
          /etc/s6-overlay/s6-rc.d/user/contents.d \
          /custom-cont-init.d
 echo longrun > /etc/s6-overlay/s6-rc.d/svc-sshd/type
 echo longrun > /etc/s6-overlay/s6-rc.d/svc-podman/type
+# Order after the init chain: /custom-cont-init.d/10-dev-init generates the sshd
+# config and the podman prerequisites (subuid ranges, /run/user/<uid>). Without
+# this both services race init — sshd restart-loops on a missing config, and a
+# podman process holding the "abc" account makes the DEVCON_USER rename fail.
+touch /etc/s6-overlay/s6-rc.d/svc-sshd/dependencies.d/init-services
+touch /etc/s6-overlay/s6-rc.d/svc-podman/dependencies.d/init-services
 # enable the services by adding them to the default "user" bundle
 touch /etc/s6-overlay/s6-rc.d/user/contents.d/svc-sshd
 touch /etc/s6-overlay/s6-rc.d/user/contents.d/svc-podman
@@ -96,8 +122,14 @@ SSHRUN
 # already created /run/user/<uid> and the subuid/subgid ranges by now.
 COPY --chmod=755 <<'PODRUN' /etc/s6-overlay/s6-rc.d/svc-podman/run
 #!/usr/bin/with-contenv bash
-[ "${DEVCON_DOCKER:-true}" = "true" ] || exec sleep infinity
-login_user="${DEVCON_USER:-abc}"
+. /usr/local/lib/devcon.sh
+if ! is_true "${DEVCON_DOCKER:-true}"; then
+    # idle instead of exiting, so s6 does not treat this as a crash loop
+    command -v s6-pause >/dev/null && exec s6-pause
+    exec sleep infinity
+fi
+# 10-dev-init resolved and validated the login user; reuse its answer
+login_user="$(cat /run/devcon/login-user)"
 uid="$(id -u "$login_user")"
 exec s6-setuidgid "$login_user" \
     env HOME=/config XDG_RUNTIME_DIR="/run/user/${uid}" \
@@ -108,6 +140,7 @@ PODRUN
 COPY --chmod=755 <<'INIT' /custom-cont-init.d/10-dev-init
 #!/usr/bin/with-contenv bash
 set -e
+. /usr/local/lib/devcon.sh
 
 # ---- optional: rename the login user (default stays "abc") ------------------
 # The base image hardcodes "abc" in its own s6 service scripts, so we rename the
@@ -116,6 +149,12 @@ set -e
 # scripts, while the renamed entry stays first so prompts/whoami show the new
 # name. Runs before any service starts, so no process is using the account yet.
 LOGIN_USER="${DEVCON_USER:-abc}"
+# reject names that would break the sshd config or lock us out ("root" would end
+# up in AllowUsers while PermitRootLogin stays no)
+if [ "$LOGIN_USER" = root ] || ! printf '%s' "$LOGIN_USER" | grep -qE '^[a-z_][a-z0-9_-]*$'; then
+    echo "[devcon] invalid DEVCON_USER '${LOGIN_USER}'; falling back to abc" >&2
+    LOGIN_USER=abc
+fi
 if [ "$LOGIN_USER" != "abc" ] && id abc >/dev/null 2>&1 && ! id "$LOGIN_USER" >/dev/null 2>&1; then
     abc_uid=$(id -u abc)
     abc_gid=$(id -g abc)
@@ -124,6 +163,11 @@ if [ "$LOGIN_USER" != "abc" ] && id abc >/dev/null 2>&1 && ! id "$LOGIN_USER" >/
     grep -q '^abc:' /etc/passwd \
         || echo "abc:x:${abc_uid}:${abc_gid}:devcon compat:/config:/bin/bash" >> /etc/passwd
 fi
+# publish the resolved name/uid so svc-podman uses the same answer (PUID has
+# already been applied by the base image's init-adduser at this point)
+login_uid="$(id -u "$LOGIN_USER")"
+mkdir -p /run/devcon
+printf '%s' "$LOGIN_USER" > /run/devcon/login-user
 
 # ---- ssh: host keys + authorized_keys (with optional env pubkey passthrough) -
 mkdir -p /config/ssh /config/.ssh
@@ -140,10 +184,7 @@ chmod 700 /config/.ssh
 chmod 600 /config/.ssh/authorized_keys
 
 # ---- ssh password auth (default OFF = key-only) -----------------------------
-case "${DEVCON_SSH_PASSWORD_AUTH:-false}" in
-    [Tt]rue|[Yy]es|[Oo]n|1) pw_auth=yes ;;
-    *)                      pw_auth=no  ;;
-esac
+if is_true "${DEVCON_SSH_PASSWORD_AUTH:-false}"; then pw_auth=yes; else pw_auth=no; fi
 if [ "$pw_auth" = yes ]; then
     if [ -n "${DEVCON_SSH_PASSWORD:-}" ]; then
         echo "${LOGIN_USER}:${DEVCON_SSH_PASSWORD}" | chpasswd
@@ -154,6 +195,13 @@ if [ "$pw_auth" = yes ]; then
 fi
 
 # ---- generate sshd config (username + password toggle are runtime-driven) ---
+# SetEnv, so `ssh devcon docker ps` (a non-login, non-interactive shell that
+# sources neither /etc/profile nor /etc/bash.bashrc) still finds the socket
+if is_true "${DEVCON_DOCKER:-true}"; then
+    ssh_setenv="SetEnv XDG_RUNTIME_DIR=/run/user/${login_uid} DOCKER_HOST=unix:///run/user/${login_uid}/podman/podman.sock"
+else
+    ssh_setenv="SetEnv XDG_RUNTIME_DIR=/run/user/${login_uid}"
+fi
 cat > /etc/ssh/sshd_config.dev <<EOF
 Port 22
 AddressFamily any
@@ -168,10 +216,10 @@ AllowUsers ${LOGIN_USER}
 UsePAM no
 PidFile /config/ssh/sshd.pid
 Subsystem sftp /usr/lib/openssh/sftp-server
+${ssh_setenv}
 EOF
 
 # ---- rootless podman: subuid/subgid, runtime dir, storage, docker env -------
-login_uid="$(id -u "$LOGIN_USER")"
 # subordinate id ranges the login user needs to map nested-container ids
 # (rewritten each boot: /etc resets and the user may be renamed via DEVCON_USER)
 printf '%s:100000:65536\n' "$LOGIN_USER" > /etc/subuid
@@ -180,11 +228,17 @@ printf '%s:100000:65536\n' "$LOGIN_USER" > /etc/subgid
 mkdir -p "/run/user/${login_uid}"
 lsiown abc:abc "/run/user/${login_uid}"   # "abc" resolves to the login uid/gid
 chmod 700 "/run/user/${login_uid}"
-# persist podman image/container storage + config on the /config volume
-mkdir -p /config/.local/share/containers /config/.config/containers
-lsiown -R abc:abc /config/.local /config/.config
+# Persist podman image/container storage + config on the /config volume.
+# NEVER chown -R the graphroot: rootless layer files carry subuid-mapped
+# ownership (a uid 33 file inside an image is stored as 100032 on disk), so
+# flattening them to abc corrupts every image that has non-root-owned files.
+# It is also an O(files) chown on each boot. Only own dirs we actually create.
+for d in /config/.local /config/.local/share /config/.local/share/containers \
+         /config/.config /config/.config/containers; do
+    [ -d "$d" ] || { mkdir -p "$d"; lsiown abc:abc "$d"; }
+done
 # export XDG_RUNTIME_DIR (+ DOCKER_HOST when the socket service is on) for shells
-if [ "${DEVCON_DOCKER:-true}" = "true" ]; then
+if is_true "${DEVCON_DOCKER:-true}"; then
     docker_host="export DOCKER_HOST=unix:///run/user/${login_uid}/podman/podman.sock"
 else
     docker_host=""
