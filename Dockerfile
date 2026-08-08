@@ -27,6 +27,7 @@ apt-get update
 apt-get install -y --no-install-recommends \
     git gh openssh-server nodejs ca-certificates screen vim \
     less tree file zip unzip ripgrep fd-find jq \
+    curl wget iproute2 netcat-openbsd traceroute \
     dnsutils iputils-ping \
     python3 python3-dev python3-pip python3-venv build-essential \
     podman podman-docker uidmap fuse-overlayfs slirp4netns \
