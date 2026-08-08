@@ -5,16 +5,21 @@ A personal, self-contained **dev environment container**, for my own use.
 An encapsulated place to work, so anything the tooling does stays inside the
 container instead of touching the host.
 
-Bundles:
+## Included tools
 
-- **git** + **GitHub CLI** (`gh`)
-- **Claude Code** (`claude`) + **Codex CLI** (`codex`)
-- **network diagnostics** — `ping` and `nslookup`
-- **Python tooling** — `python3`, `pip`, and `venv`; compiler support for Python and npm native modules
-- **GNU Screen** (`screen`) — persistent terminal sessions
-- **code-server** — VS Code in the browser
-- **sshd** — key-only SSH (use a terminal or VS Code Remote-SSH)
-- **rootless Podman** — `docker`/`docker compose` inside the container (no daemon on the host)
+- **Core development:** git, GitHub CLI (`gh`), Python 3 with `pip`/`venv`,
+  Node/npm, and a native build toolchain for Python and npm packages.
+- **AI coding:** Claude Code (`claude`) and Codex CLI (`codex`).
+- **Editors and sessions:** code-server, Vim (`vi`/`vim`), and GNU Screen
+  (`screen`).
+- **Files and search:** `less`, `tree`, `file`, `zip`/`unzip`, `rg`, `fd`, and
+  `jq`. (`fd` is provided as the conventional alias for Ubuntu's `fdfind`.)
+- **Network diagnostics:** `curl`, `wget`, `ping`, `nslookup`, `ip`, `nc`, and
+  `traceroute`.
+- **Process diagnostics:** `ps`/`top`, `lsof`, `strace`, and `htop`.
+- **Shell productivity:** Bash completion, `fzf`, `direnv`, and `shellcheck`.
+- **Remote and containers:** key-only SSH plus rootless Podman through
+  `docker`/`docker compose`, without a host daemon.
 
 Built on `ghcr.io/linuxserver/code-server` for a maintained code-server with s6
 init and `PUID`/`PGID` handling, so files created in the volume are owned by my
