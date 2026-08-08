@@ -30,6 +30,7 @@ apt-get install -y --no-install-recommends \
     curl wget iproute2 netcat-openbsd traceroute \
     dnsutils iputils-ping \
     procps lsof strace htop \
+    bash-completion fzf direnv shellcheck \
     python3 python3-dev python3-pip python3-venv build-essential \
     podman podman-docker uidmap fuse-overlayfs slirp4netns \
     netavark aardvark-dns podman-compose docker-compose-v2
