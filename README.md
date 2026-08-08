@@ -11,6 +11,7 @@ Bundles:
 - **Claude Code** (`claude`) + **Codex CLI** (`codex`)
 - **network diagnostics** — `ping` and `nslookup`
 - **Python tooling** — `python3`, `pip`, and `venv`; compiler support for Python and npm native modules
+- **GNU Screen** (`screen`) — persistent terminal sessions
 - **code-server** — VS Code in the browser
 - **sshd** — key-only SSH (use a terminal or VS Code Remote-SSH)
 - **rootless Podman** — `docker`/`docker compose` inside the container (no daemon on the host)
