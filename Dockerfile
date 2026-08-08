@@ -26,6 +26,7 @@ curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt-get update
 apt-get install -y --no-install-recommends \
     git gh openssh-server nodejs ca-certificates screen vim \
+    less tree file zip unzip ripgrep fd-find jq \
     dnsutils iputils-ping \
     python3 python3-dev python3-pip python3-venv build-essential \
     podman podman-docker uidmap fuse-overlayfs slirp4netns \
@@ -70,6 +71,10 @@ ENGINE
 
 # Silence the podman-docker "emulating docker" banner on every `docker` call.
 RUN touch /etc/containers/nodocker
+
+# Ubuntu calls the fd utility "fdfind" to avoid a name collision; expose the
+# conventional command name used by most documentation and editor integrations.
+RUN ln -s /usr/bin/fdfind /usr/local/bin/fd
 
 # The docker-compose-v2 package installs only the CLI plugin, nothing on PATH.
 # Symlink it so `docker-compose ...` works directly as well as `docker compose ...`.
