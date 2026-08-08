@@ -27,6 +27,7 @@ apt-get update
 apt-get install -y --no-install-recommends \
     git gh openssh-server nodejs ca-certificates \
     dnsutils iputils-ping \
+    python3 python3-dev python3-pip python3-venv build-essential \
     podman podman-docker uidmap fuse-overlayfs slirp4netns \
     netavark aardvark-dns podman-compose docker-compose-v2
 npm install -g @anthropic-ai/claude-code @openai/codex
