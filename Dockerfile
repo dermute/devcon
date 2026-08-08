@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1
-# Dev environment container — git + gh + Claude Code + code-server + sshd.
+# Dev environment container — git + gh + Claude Code + Codex CLI + code-server + sshd.
 #
 # Base: LinuxServer's code-server image. It already ships a working code-server
 # with s6-overlay init and PUID/PGID handling, so files created in the mounted
 # volume are owned by my own user instead of root. It is Ubuntu-based because
 # code-server needs glibc (the Alpine/musl route is impractical). We add the
-# GitHub CLI, Node/Claude Code, and an sshd service on top.
+# GitHub CLI, Node-based AI CLIs, and an sshd service on top.
 #
 # NOTE: requires BuildKit (default on Docker 23+) for the heredoc RUN/COPY below.
 FROM ghcr.io/linuxserver/code-server:latest
@@ -28,7 +28,7 @@ apt-get install -y --no-install-recommends \
     git gh openssh-server nodejs ca-certificates \
     podman podman-docker uidmap fuse-overlayfs slirp4netns \
     netavark aardvark-dns podman-compose docker-compose-v2
-npm install -g @anthropic-ai/claude-code
+npm install -g @anthropic-ai/claude-code @openai/codex
 npm cache clean --force
 rm -rf /var/lib/apt/lists/*
 PKG

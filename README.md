@@ -8,7 +8,7 @@ container instead of touching the host.
 Bundles:
 
 - **git** + **GitHub CLI** (`gh`)
-- **Claude Code** (`claude`)
+- **Claude Code** (`claude`) + **Codex CLI** (`codex`)
 - **code-server** — VS Code in the browser
 - **sshd** — key-only SSH (use a terminal or VS Code Remote-SSH)
 - **rootless Podman** — `docker`/`docker compose` inside the container (no daemon on the host)
@@ -82,6 +82,7 @@ confined to devcon.
 ```bash
 gh auth login       # GitHub
 claude              # Claude Code — follow the login flow
+codex               # Codex CLI — follow the login flow
 ```
 
 Both persist under the `/config` volume, so they survive rebuilds.
