@@ -25,7 +25,7 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubc
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt-get update
 apt-get install -y --no-install-recommends \
-    git gh openssh-server nodejs ca-certificates screen \
+    git gh openssh-server nodejs ca-certificates screen vim \
     dnsutils iputils-ping \
     python3 python3-dev python3-pip python3-venv build-essential \
     podman podman-docker uidmap fuse-overlayfs slirp4netns \
