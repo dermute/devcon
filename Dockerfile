@@ -26,6 +26,7 @@ curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt-get update
 apt-get install -y --no-install-recommends \
     git gh openssh-server nodejs ca-certificates \
+    dnsutils iputils-ping \
     podman podman-docker uidmap fuse-overlayfs slirp4netns \
     netavark aardvark-dns podman-compose docker-compose-v2
 npm install -g @anthropic-ai/claude-code @openai/codex

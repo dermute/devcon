@@ -9,6 +9,7 @@ Bundles:
 
 - **git** + **GitHub CLI** (`gh`)
 - **Claude Code** (`claude`) + **Codex CLI** (`codex`)
+- **network diagnostics** — `ping` and `nslookup`
 - **code-server** — VS Code in the browser
 - **sshd** — key-only SSH (use a terminal or VS Code Remote-SSH)
 - **rootless Podman** — `docker`/`docker compose` inside the container (no daemon on the host)
