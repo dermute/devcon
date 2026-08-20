@@ -50,6 +50,9 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
+          # Buildx publishes provenance as an OCI attestation manifest by default.
+          # GHCR shows that metadata entry as an extra `unknown/unknown` platform.
+          provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
