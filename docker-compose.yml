@@ -20,10 +20,13 @@ services:
     volumes:
       # host path for persisted state (repos, ~/.claude, gh auth, ssh keys, podman images)
       - "${DEVCON_CONFIG:-/.config}:/config"
-    # rootless podman ("docker" inside) needs these — this is NOT privileged and
-    # grants no host or host-daemon access; it only relaxes syscall/LSM filtering
-    # for this container and adds a fuse device. Nested containers stay rootless
-    # and confined to devcon. Remove these three + the device to disable docker.
+    # Podman-in-Docker needs the outer container to permit creation of nested user
+    # and mount namespaces. Without this, newuidmap fails writing uid_map even
+    # though Podman itself and all nested containers run as the non-root login user.
+    # No host Docker/Podman socket is mounted.
+    privileged: true
+    # Keep the requirements explicit for runtimes that do not imply every
+    # security option/device from privileged mode.
     security_opt:
       - seccomp=unconfined
       - apparmor=unconfined
@@ -31,7 +34,6 @@ services:
     devices:
       - /dev/fuse
     restart: unless-stopped
-    # deliberately NOT set: privileged, and no /var/run/docker.sock mount —
-    # keep the container unable to touch the host or the host Docker daemon.
+    # Deliberately no /var/run/docker.sock mount: nested Podman has its own store.
     #
     # to update:  docker compose pull && docker compose up -d

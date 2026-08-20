@@ -42,7 +42,7 @@ PKG
 # ---- rootless podman config (the "docker" inside the container) -------------
 # Nested containers run rootless as the login user; storage lands on the /config
 # volume (a real host fs), so there is no overlay-on-overlay. See docker-compose.yml
-# for the seccomp/apparmor/fuse relaxations the outer container needs.
+# for the outer-container privileges and /dev/fuse access Podman needs.
 #
 # Debian/Ubuntu podman ships no default search registry — without this,
 # `podman run hello-world` fails on short-name resolution.
@@ -230,6 +230,17 @@ ${ssh_setenv}
 EOF
 
 # ---- rootless podman: subuid/subgid, runtime dir, storage, docker env -------
+# Nested containers create mounts in child mount namespaces. Podman checks that
+# the parent mount tree is shared so those mounts propagate correctly. Docker
+# starts the root mount as private, so promote it before any Podman process runs.
+# This needs the privileged outer-container setting in docker-compose.yml.
+if is_true "${DEVCON_DOCKER:-true}"; then
+    if ! mount --make-rshared /; then
+        echo "[devcon] failed to make / recursively shared; start devcon with privileged: true" >&2
+        exit 1
+    fi
+fi
+
 # subordinate id ranges the login user needs to map nested-container ids
 # (rewritten each boot: /etc resets and the user may be renamed via DEVCON_USER)
 printf '%s:100000:65536\n' "$LOGIN_USER" > /etc/subuid

@@ -80,10 +80,15 @@ docker compose up -d
   the Docker API — the VS Code Docker extension, testcontainers — work too.
 - Set `DEVCON_DOCKER=false` in `.env` to turn the API socket off.
 
-This needs the `security_opt` (`seccomp`/`apparmor`/`label` unconfined) and the
-`/dev/fuse` device already set in `docker-compose.yml`. That is **not** `--privileged`
-and grants no host or host-daemon access — nested containers run rootless and stay
-confined to devcon.
+This needs the outer devcon container to run with `privileged: true`, plus
+`/dev/fuse`, as configured in `docker-compose.yml`. The privilege is required at
+the outer boundary so `newuidmap` can create nested user namespaces and startup
+can make the mount tree recursively shared. Podman and the containers it starts
+still run as the non-root login user, and no host Docker/Podman socket is mounted.
+This is nevertheless a meaningful security relaxation: only run this image on a
+host where devcon and its users are trusted. If nested containers are not needed,
+remove `privileged`, `security_opt`, and `devices` from the Compose file and set
+`DEVCON_DOCKER=false`.
 
 ### First-run auth (inside the container)
 
@@ -114,12 +119,11 @@ Both persist under the `/config` volume, so they survive rebuilds.
 
 ## Notes
 
-- No `privileged` and no host Docker socket mounted — the container can't reach the
-  host or the host Docker daemon. Docker inside is rootless Podman, confined to the
-  container. It's host-package isolation, not a security sandbox against hostile code.
-- Rootless Podman does require the `security_opt` (`seccomp`/`apparmor`/`label`
-  unconfined) and `/dev/fuse` device in `docker-compose.yml` — a much smaller
-  relaxation than `--privileged`, with no host reach.
+- No host Docker/Podman socket is mounted; Docker inside uses an independent,
+  rootless Podman store under `/config`.
+- The outer devcon container is privileged so nested rootless Podman can create
+  user and mount namespaces. Treat devcon as a trusted personal environment, not
+  as a security boundary against hostile code.
 - Passwords are passed as env vars, so `DEVCON_PASSWORD` / `DEVCON_SSH_PASSWORD`
   are visible in `docker inspect` and to any process in the container. Fine for a
   personal box; use compose `secrets` if that ever stops being true.
