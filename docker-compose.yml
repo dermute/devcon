@@ -10,6 +10,8 @@ services:
       - GIT_USER_NAME=${GIT_USER_NAME}     # git config --global user.name
       - GIT_USER_EMAIL=${GIT_USER_EMAIL}   # git config --global user.email
       - DEVCON_USER=${DEVCON_USER:-abc}    # login username inside the container
+      - DEVCON_CODE_SERVER=${DEVCON_CODE_SERVER:-true}  # code-server web UI (set false to disable)
+      - DEVCON_SSH=${DEVCON_SSH:-true}     # ssh server (set false to disable)
       - DEVCON_SSH_PASSWORD_AUTH=${DEVCON_SSH_PASSWORD_AUTH:-false}  # ssh password login (default off = key-only)
       - DEVCON_SSH_PASSWORD=${DEVCON_SSH_PASSWORD:-}   # ssh password, used only when password auth is on
       - DEVCON_SSH_PUBKEY=${DEVCON_SSH_PUBKEY:-}       # public key to install for key-only ssh

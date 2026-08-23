@@ -43,6 +43,12 @@ Then:
 - **code-server** → `http://<host>:8443` (password from `.env`)
 - **ssh** → `ssh -p 2222 <DEVCON_USER>@<host>` (`abc` by default)
 
+Set DEVCON_CODE_SERVER=false or DEVCON_SSH=false in .env to disable the
+respective listener. Both default to true. The corresponding host port may
+remain published by Compose, but connections are refused while its service is
+disabled.
+
+
 ### SSH access
 
 Key-only by default. Provide a public key one of two ways:
@@ -109,6 +115,8 @@ Both persist under the `/config` volume, so they survive rebuilds.
 | `DEVCON_CONFIG`            | `/.config`  | host path for the persisted `/config`                |
 | `DEVCON_USER`              | `abc`       | login username inside the container                  |
 | `DEVCON_PUID` / `DEVCON_PGID` | `1000`/`100` | user/group id that owns files in the volume       |
+| `DEVCON_CODE_SERVER`       | `true`      | enable the code-server web UI listener               |
+| `DEVCON_SSH`               | `true`      | enable the ssh listener                              |
 | `DEVCON_SSH_PUBKEY`        | —           | public key installed into `authorized_keys`          |
 | `DEVCON_SSH_PASSWORD_AUTH` | `false`     | allow ssh password login (else key-only)             |
 | `DEVCON_SSH_PASSWORD`      | —           | login user's ssh password (when password auth is on) |

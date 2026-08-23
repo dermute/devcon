@@ -94,7 +94,7 @@ is_true() {
 }
 LIB
 
-# ---- add an sshd service to the existing s6 stack ---------------------------
+# ---- add optional sshd/code-server services to the existing s6 stack --------
 RUN <<'SETUP'
 set -e
 # give the abc login user a home on the /config volume and a real shell for ssh,
@@ -120,12 +120,31 @@ SETUP
 
 # sshd: runs as root (it drops to the login user on login). The config is
 # generated at runtime by 10-dev-init below, because the allowed username and
-# the password-auth toggle are both env-driven.
+# the password-auth toggle are both env-driven. Keep the service alive but
+# paused when disabled so s6 does not treat the intentional exit as a crash.
 COPY --chmod=755 <<'SSHRUN' /etc/s6-overlay/s6-rc.d/svc-sshd/run
 #!/usr/bin/with-contenv bash
+. /usr/local/lib/devcon.sh
+if ! is_true "${DEVCON_SSH:-true}"; then
+    command -v s6-pause >/dev/null && exec s6-pause
+    exec sleep infinity
+fi
 mkdir -p /run/sshd
 exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config.dev
 SSHRUN
+
+# The base image owns the code-server service. Wrap, rather than duplicate, its
+# run script so upgrades to the base image retain its normal startup behavior.
+RUN mv /etc/s6-overlay/s6-rc.d/svc-code-server/run /etc/s6-overlay/s6-rc.d/svc-code-server/run.original
+COPY --chmod=755 <<'CODERUN' /etc/s6-overlay/s6-rc.d/svc-code-server/run
+#!/usr/bin/with-contenv bash
+. /usr/local/lib/devcon.sh
+if ! is_true "${DEVCON_CODE_SERVER:-true}"; then
+    command -v s6-pause >/dev/null && exec s6-pause
+    exec sleep infinity
+fi
+exec /etc/s6-overlay/s6-rc.d/svc-code-server/run.original
+CODERUN
 
 # rootless podman API socket → DOCKER_HOST. Runs as the login user; gated by
 # DEVCON_DOCKER so it can be turned off without a crash loop. 10-dev-init has
